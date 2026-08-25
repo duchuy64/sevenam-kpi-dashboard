@@ -128,7 +128,7 @@
   // Quy ước tiến độ dùng CHUNG cho BC1 và BC2.
   // diff = % hoàn thành KPI - % tiến độ thời gian (đơn vị: điểm %).
   function bc1Status(diff){
-    if(diff < -10) return {key:'red',label:'Chậm nhiều',short:'Chậm nhiều'};
+    if(diff < -10) return {key:'red',label:'',short:''};
     if(diff < 0) return {key:'orange',label:'Chậm',short:'Chậm'};
     if(diff <= 10) return {key:'blue',label:'Kịp',short:'Kịp'};
     return {key:'green',label:'Vượt nhiều',short:'Vượt nhiều'};
@@ -336,7 +336,7 @@
 
       // Giữ cỡ chữ gần như thiết kế cũ.
       const labelSize=i===3?14.5:15.5;
-      const conditionSize=14;
+      const conditionSize=16;
 
       // Đo chính xác chiều rộng từng phần để tính tổng chiều rộng cả cụm.
       ctx.save();
