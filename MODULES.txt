@@ -1,0 +1,2 @@
+01 commercial -> modules/commercial/index.html -> SEVENAM_Dashboard_AutoPeriod_V7
+02 kpi        -> modules/kpi/index.html        -> sevenam-kpi-dashboard-main

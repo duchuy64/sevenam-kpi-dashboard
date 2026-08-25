@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SEVEN.AM – Dashboard Hub</title>
+  <link rel="stylesheet" href="hub.css" />
+</head>
+<body>
+  <div class="hub-shell">
+    <header class="hub-header">
+      <div class="brand-block">
+        <div class="eyebrow">SEVEN.AM • INTERNAL REPORTING</div>
+        <div class="brand-title">Dashboard Hub</div>
+      </div>
+      <nav class="hub-tabs" aria-label="Chọn dashboard">
+        <button class="hub-tab active" type="button" data-module="kpi">
+          <span class="tab-index">01</span>
+          <span class="tab-copy">
+            <strong>KPI Dashboard</strong>
+            <small>BC1 Tiến độ / BC2 Ban Giám đốc</small>
+          </span>
+        </button>
+        <button class="hub-tab" type="button" data-module="commercial">
+          <span class="tab-index">02</span>
+          <span class="tab-copy">
+            <strong>Commercial Dashboard</strong>
+            <small>Báo cáo Tuần / Tháng</small>
+          </span>
+        </button>
+      </nav>
+      <div class="hub-status" id="hubStatus">KPI Dashboard BC1 & BC2</div>
+    </header>
+
+    <main class="hub-main">
+      <iframe
+        id="moduleFrame"
+        class="module-frame"
+        title="SEVEN.AM Dashboard"
+        src="modules/kpi/index.html"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
+    </main>
+  </div>
+  <script src="hub.js"></script>
+</body>
+</html>

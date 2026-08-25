@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SEVEN.AM Commercial Dashboard 3:2</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <aside class="control-panel">
+    <div class="panel-header">
+      <div class="eyebrow">SEVEN.AM OFFLINE TOOL</div>
+      <h1>Commercial Operating Dashboard</h1>
+      <p>Grid cố định 2560×1707 • tỷ lệ 3:2 • font tối thiểu 15px • 2 tab Tuần / Tháng</p>
+    </div>
+
+    <section class="control-card">
+      <h2>1. Dán bảng dữ liệu</h2>
+      <p class="help-text">Dán nguyên vùng dữ liệu Excel/Google Sheet (ví dụ A1:AA48). Tool tự nhận Tổng tháng + Tuần 1–4, tự chọn kỳ theo ngày báo cáo và so sánh các kỳ.</p>
+      <textarea id="dataInput" spellcheck="false"></textarea>
+      <div class="action-grid">
+        <button id="parseBtn" class="btn primary">Đối chiếu & tạo Dashboard</button>
+        <button id="sampleBtn" class="btn secondary">Nạp dữ liệu mẫu</button>
+      </div>
+    </section>
+
+    <section class="control-card compact">
+      <h2>2. Kỳ báo cáo</h2>
+      <div class="field-grid">
+        <label>Từ ngày<input id="dateFrom" type="date" /></label>
+        <label>Đến ngày<input id="dateTo" type="date" /></label>
+        <label>Ngày tổng hợp<input id="dateSummary" type="date" /></label>
+        <label>Số ngày thực chạy<input id="runDays" type="text" readonly value="—" /></label>
+        <label>Kỳ tự nhận<input id="periodDetected" type="text" readonly value="—" /></label>
+      </div>
+    </section>
+
+    <section class="control-card compact">
+      <h2>3. Kiểm tra dữ liệu</h2>
+      <div id="validation" class="validation"></div>
+    </section>
+
+    <section class="control-card compact">
+      <h2>4. Xuất ảnh 3:2</h2>
+      <div class="fixed-ratio">Tỷ lệ cố định: <b>3:2</b><br>Kích thước xuất: <b>2560 × 1707 px</b></div>
+      <div class="action-grid">
+        <button id="exportBtn" class="btn success">Xuất PNG 2K</button>
+        <button id="copyBtn" class="btn secondary">Copy ảnh</button>
+      </div>
+    </section>
+
+    <div class="panel-footer">Dashboard xuất ra chỉ chứa báo cáo, không chứa panel kiểm tra dữ liệu.</div>
+  </aside>
+
+  <main class="preview-area">
+    <div class="preview-topbar">
+      <div class="tabs">
+        <button class="tab active" data-tab="week">BC1 – Báo cáo tuần</button>
+        <button class="tab" data-tab="month">BC2 – Báo cáo tháng</button>
+      </div>
+      <div id="previewMeta" class="preview-meta"></div>
+    </div>
+    <div class="preview-scroll">
+      <div class="canvas-wrap"><canvas id="dashCanvas"></canvas></div>
+    </div>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script src="app.js?v=WIDE_PERIOD_AUTO_V7"></script>
+</body>
+</html>
