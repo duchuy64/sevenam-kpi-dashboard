@@ -422,13 +422,31 @@ function insightList(d){let a=[];let mp=d.mSucc!=null&&d.mSuccTar?d.mSucc/d.mSuc
  if(sp!=null&&ssp!=null){let cm=compareMetric('Doanh thu thành công');let cmp=cm.delta!=null?` ${cm.delta>=0?'Tăng':'Giảm'} ${fmtNum(Math.abs(cm.delta),1)}% so kỳ trước.`:'';a.push(`Sale Online đạt ${fmtNum(sp,2)}% KPI tạo đơn và ${fmtNum(ssp,2)}% KPI thành công; tỷ lệ hoàn ${fmt(d.crRefund,'%')}.${cmp}`);}
  if(cpct!=null){let cm=compareMetric('Doanh thu khách quay lại'),cmp=cm.delta!=null?` ${cm.delta>=0?'Tăng':'Giảm'} ${fmtNum(Math.abs(cm.delta),1)}% so kỳ trước.`:'';a.push(`CSKH ${cpct>=100?'vượt':'đạt'} KPI doanh thu, đạt ${fmtNum(cpct,2)}%; tỷ lệ KH có nhu cầu chuyển thành mua lại ${fmt(d.retRate,'%')}.${cmp}`);}return a.slice(0,3)}
 function priorities(d){let a=[];if(d.refund&&d.saleCreate)a.push({title:'Tỷ lệ hoàn cao',value:money(d.refund),sub:`${fmt(d.crRefund,'%')} doanh thu tạo đơn`,icon:'refresh'});if(d.pending)a.push({title:'Đơn treo cao',value:money(d.pending),sub:`${fmt(d.pendingOrders,'Đơn')} đơn`,icon:'hourglass'});if(d.saleSucc!=null&&d.saleSuccTar!=null&&d.saleSucc<d.saleSuccTar)a.push({title:'Sale Online thiếu KPI thành công',value:money(d.saleSuccTar-d.saleSucc),sub:'so với target kỳ',icon:'target'});if(d.mSucc!=null&&d.mSuccTar!=null&&d.mSucc<d.mSuccTar)a.push({title:'Marketing thiếu KPI thành công',value:money(d.mSuccTar-d.mSucc),sub:'so với target kỳ',icon:'megaphone'});if(d.retRate!=null)a.push({title:'Tỷ lệ KH có nhu cầu chuyển thành mua lại thấp',value:fmt(d.retRate,'%'),sub:'cần tăng chuyển đổi',icon:'people'});return a.slice(0,5)}
-function actions(d){let ads=d.channels.find(c=>c.name==='Ads');return[
- {title:'GIẢM TỶ LỆ HOÀN',icon:'refresh',body:[`Kiểm soát hoàn ${fmt(d.crRefund,'%')} (${money(d.refund)}).`,'Xác nhận nhu cầu trước giao, chăm nhóm có nguy cơ hoàn.']},
- {title:'XỬ LÝ ĐƠN TREO',icon:'truck',body:[`Đơn treo ${money(d.pending)}; chờ vận chuyển ${money(d.delivering)}.`,'Ưu tiên đơn tồn lâu, phối hợp kho và vận hành.']},
- {title:'TỐI ƯU MARKETING',icon:'chart',body:[ads?.p!=null?`Ads đạt ${fmtNum(ads.p,2)}% KPI; giảm nhóm ROAS thấp.`:'Tối ưu ROAS/CP-TC từ số gốc.','Duy trì kênh có tiến độ KPI tốt nhất.']},
- {title:'TĂNG CHUYỂN ĐỔI SALE',icon:'funnel',body:[`CR thành công hiện ${fmt(d.crSuccess,'%')}.`,'Rà soát đơn chưa thành công, rút ngắn xử lý sau chốt.']},
- {title:'TĂNG KHÁCH QUAY LẠI',icon:'people',body:[`Tập trung ${fmt(d.csNeed,'KH')} KH đã có nhu cầu.`,`Tăng tần suất CS nhóm có hẹn; CR mua lại ${fmt(d.retRate,'%')}.`]}
-]}
+function actions(d){
+ let ads=d.channels.find(c=>c.name==='Ads');
+ return[
+  {title:'GIẢM TỶ LỆ HOÀN',icon:'refresh',body:[
+   `Hoàn ${fmt(d.crRefund,'%')} (${money(d.refund)}); xác nhận kỹ trước giao`,
+   'Ưu tiên xử lý nhóm có nguy cơ hoàn'
+  ]},
+  {title:'XỬ LÝ ĐƠN TREO',icon:'truck',body:[
+   `Treo ${money(d.pending)}; đang giao ${money(d.delivering)}`,
+   'Ưu tiên đơn lâu ngày, phối hợp kho xử lý'
+  ]},
+  {title:'TỐI ƯU MARKETING',icon:'chart',body:[
+   ads?.p!=null?`Ads đạt ${fmtNum(ads.p,1)}% KPI; giảm nhóm ROAS thấp`:'Ưu tiên nhóm có ROAS và CP/TC tốt',
+   'Dồn nguồn lực cho kênh có tiến độ tốt'
+  ]},
+  {title:'TĂNG CHUYỂN ĐỔI SALE',icon:'funnel',body:[
+   `CR thành công ${fmt(d.crSuccess,'%')}; rà đơn chưa TC`,
+   'Rút ngắn xử lý sau chốt và giao hàng'
+  ]},
+  {title:'TĂNG KHÁCH QUAY LẠI',icon:'people',body:[
+   `${fmt(d.csNeed,'KH')} KH có nhu cầu; ưu tiên follow-up`,
+   `Tăng mua lại, hiện đạt ${fmt(d.retRate,'%')}`
+  ]}
+ ]
+}
 function discountHistory(name){let r=find(name),cur=r?.actual;if(cur==null)return{cur:null,p1:null,p2:null};let p1=compareRow(state.comparePrev,name)?.actual??null,p2=null;if(state.periods.length&&state.selectedPeriods.length){let periods=state.periods.filter(p=>p.type===state.tab),idx=periods.findIndex(p=>p.key===state.selectedPeriods[0].key);if(idx>1)p2=compareRow(state.periodRows[periods[idx-2].key]||[],name)?.actual??null}if(p1!=null||p2!=null)return{cur,p1,p2};let text=r?.insight||'',m=[...text.matchAll(/(giảm|tăng)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:điểm\s*)?%/gi)];let p=m.map(x=>norm(x[1])==='giam'?cur+num(x[2]):cur-num(x[2]));return{cur,p1:p[0]??null,p2:p[1]??null}}
 
 function setup(){
@@ -532,6 +550,7 @@ function metricCard(x,y,w,h,title,actual,target,color){
    let g=actual-target;tx(`${g>=0?'▲':'▼'} ${signedMoney(g)}`,x+w-20,y+h-37,19,g>=0?C.green:C.red,true,'right')
  }
 }
+function noFinalDot(t){return String(t??'').trim().replace(/[.。]+$/,'').trim()}
 function shortText(t,max=38){t=String(t||'');return t.length<=max?t:t.slice(0,max-1).trim()+'…'}
 
 function draw(){
@@ -575,11 +594,11 @@ function draw(){
  // C Channel donut + legend
  tx('DOANH THU THÀNH CÔNG THEO KÊNH',345,849,20,C.navy,true,'center');let chCols=['#2f65d9','#159347','#f39200','#7437ac'],chVals=d.channels.map(c=>c.v||0);donut(172,1015,112,chVals,chCols,money(d.channelSum),'(100%)');
  d.channels.forEach((c,i)=>{let y=900+i*58;ctx.fillStyle=chCols[i];ctx.beginPath();ctx.arc(330,y+12,8,0,Math.PI*2);ctx.fill();tx(c.name,350,y,20,C.text,true);let sh=d.channelSum&&c.v?c.v/d.channelSum*100:null;tx(money(c.v),545,y,19,C.navy,true,'right');tx(sh!=null?`(${fmtNum(sh,2)}%)`:'—',642,y,18,C.navy,true,'right')});
- line(464,892,464,1122,'#d2d8e2',1.4);
+ line(470,892,470,1122,'#d2d8e2',1.4);
  // D Progress
  tx('TIẾN ĐỘ HOÀN THÀNH KPI THÀNH CÔNG (THEO KÊNH)',345,1181,17,C.navy,true,'center');let sorted=[...d.channels].sort((a,b)=>(b.p??-1)-(a.p??-1));sorted.forEach((c,i)=>{let y=1217+i*25;tx(c.name,42,y,18,C.text,true);progress(165,y+6,340,c.p!=null?c.p/100:null,chCols[d.channels.findIndex(x=>x.name===c.name)],13);tx(c.p!=null?fmtNum(c.p,2)+'%':'—',642,y,18,C.navy,true,'right')});
  // E Note
- let best=[...d.channels].filter(c=>c.p!=null).sort((a,b)=>b.p-a.p)[0]?.name||'—';noteBox(32,1323,626,65,'#dce8ff','#7ea4e8',`Nhận xét: ${best} có tiến độ tốt nhất; Ads cần ưu tiên tối ưu hiệu quả và tiến độ KPI.`,'#203f78');
+ let best=[...d.channels].filter(c=>c.p!=null).sort((a,b)=>b.p-a.p)[0]?.name||'—';noteBox(32,1323,626,65,'#dce8ff','#7ea4e8',noFinalDot(`Nhận xét: ${best} có tiến độ tốt nhất; Ads cần ưu tiên tối ưu hiệu quả và tiến độ KPI`),'#203f78');
 
  // BLOCK 4 SALE
  outerBlock(686,532,700,870,C.green,'#fff');sectionHead('4','SALE ONLINE  (CONVERSION ENGINE)',686,532,700,C.green,50);
@@ -590,14 +609,14 @@ function draw(){
  tx('CƠ CẤU ĐƠN TREO',1236,737,20,'#235c36',true,'center');let pvals=[d.saleNew,d.saleWaitStock,d.saleConfirmed,d.saleWaitTransfer],pcols=['#2d67d5','#f08900','#189545','#9aa3b2'],pendingTotal=pvals.reduce((s,v)=>s+(v||0),0);donut(1236,858,92,pvals,pcols,money(pendingTotal),'(100%)');
  ['Mới','Chờ hàng','Đã xác nhận','Chờ chuyển hàng'].forEach((n,i)=>{let y=978+i*42,sv=pvals[i],sh=pendingTotal&&sv?sv/pendingTotal*100:null;ctx.fillStyle=pcols[i];ctx.beginPath();ctx.arc(1115,y+9,7,0,Math.PI*2);ctx.fill();wrap(`${n}: ${money(sv)} ${sh!=null?'('+fmtNum(sh,2)+'%)':''}`,1132,y,232,17,C.text,false,'left',1.12,2)});
  tx('KPI VẬN HÀNH TRỌNG YẾU',1036,1179,20,'#235c36',true,'center');let sm=[['Đơn treo',fmt(d.pendingOrders,'Đơn'),'hourglass'],['Tỉ lệ hoàn',fmt(d.crRefund,'%'),'refresh'],['Tỉ lệ chốt',fmt(d.crCreate,'%'),'target'],['AOV',fmt(d.aov,'Tr/đơn'),'cart'],['Đang giao',fmt(d.deliveringOrders,'Đơn'),'truck']];sm.forEach((mtr,i)=>{let col=i%3,row=Math.floor(i/3),x=704+col*218,y=1212+row*60;miniIcon(mtr[2],x+20,y+28,C.navy,.72);tx(mtr[0],x+48,y+6,17,C.navy,true);tx(mtr[1],x+48,y+31,23,C.navy,true)});
- noteBox(698,1335,676,62,'#dff1e2','#80bd8b',`Nhận xét: Phễu đã tự cân nội bộ. Tạo đơn = Treo + Đang giao + Thành công + Hoàn; chỉ số phụ tính từ số gốc từng phần.`,'#255d35');
+ noteBox(698,1335,676,62,'#dff1e2','#80bd8b',noFinalDot(`Nhận xét: Phễu đã tự cân nội bộ; Tạo đơn = Treo + Đang giao + Thành công + Hoàn; chỉ số phụ tính từ số gốc từng phần`),'#255d35');
 
  // BLOCK 5 CSKH
  outerBlock(1402,532,616,870,C.purple,'#fff');sectionHead('5','CSKH  (RETENTION ENGINE)',1402,532,616,C.purple,50);
  line(1708,606,1708,706,'#c9d0dc');wrap('DOANH THU QUAY LẠI',1420,604,270,17,C.purple,true,'center',1.15,2);tx(money(d.cRev),1555,650,36,C.purple,true,'center');tx(`Target: ${money(d.cTar)}`,1555,694,17,C.text,true,'center');wrap('TỶ LỆ HOÀN THÀNH',1726,604,270,17,C.purple,true,'center',1.15,2);tx(cpct!=null?fmtNum(cpct,2)+'%':'—',1861,650,36,C.purple,true,'center');if(d.cRev!=null&&d.cTar!=null)tx(`${d.cRev>=d.cTar?'▲':'▼'} ${signedMoney(d.cRev-d.cTar)}`,1861,694,17,d.cRev>=d.cTar?C.green:C.red,true,'center');
  tx('PHỄU CHĂM SÓC KHÁCH HÀNG',1710,737,20,C.purple,true,'center');let cs=[['KH cần CS',firstVal('KH cần Chăm sóc','KH cần CS'),'KH',null],['Lượt CS',firstVal('Lượt Chăm sóc','Lượt CS'),'Lượt',null],['Kết nối thành công',d.csConn,'KH',d.connRate],['KH có nhu cầu',d.csNeed,'KH',d.needRate],['KH quay lại',d.csRet,'KH',d.retRate],['Doanh thu quay lại',d.cRev,'Tr',null]],cWidths=[560,530,500,470,440,410];cs.forEach((r,i)=>{let w=cWidths[i],x=1710-w/2,y=770+i*58,fh=52;ctx.fillStyle=i===5?'#8c46bb':`rgba(113,50,165,${.17+.10*i})`;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w-12,y+fh);ctx.lineTo(x+12,y+fh);ctx.closePath();ctx.fill();let dark=i>=4;tx(r[0],x+22,y+13,19,dark?'#fff':C.text,true);tx(fmt(r[1],r[2]),x+w-22,y+7,23,dark?'#fff':C.purple,true,'right');if(r[3]!=null)tx(`(${fmtNum(r[3],2)}%)`,x+w-22,y+32,16,dark?'#fff':C.purple,true,'right')});
  tx('HIỆU QUẢ KHÁCH QUAY LẠI',1710,1139,20,C.purple,true,'center');rr(1414,1170,288,119,10,C.softPurple);wrap('TỶ LỆ KH QUAY LẠI / KH CÓ NHU CẦU',1430,1185,256,16,C.purple,true,'center',1.15,3);tx(fmt(d.retRate,'%'),1558,1244,31,C.purple,true,'center');rr(1718,1170,288,119,10,C.softPurple);wrap('DOANH THU BÌNH QUÂN / KH QUAY LẠI',1734,1185,256,16,C.purple,true,'center',1.15,3);tx(d.csAov!=null?`≈ ${fmtNum(d.csAov,2)} tr/khách`:'—',1862,1244,28,C.purple,true,'center');
- noteBox(1414,1301,592,87,'#eadcf4','#a77bc4',`Nhận xét: CSKH ${cpct!=null&&cpct>=100?'vượt':'đạt'} KPI; điểm nghẽn là chuyển KH có nhu cầu thành mua lại (${fmt(d.retRate,'%')}).`,'#582476');
+ noteBox(1414,1301,592,87,'#eadcf4','#a77bc4',noFinalDot(`Nhận xét: CSKH ${cpct!=null&&cpct>=100?'vượt':'đạt'} KPI; điểm nghẽn là chuyển KH có nhu cầu thành mua lại (${fmt(d.retRate,'%')})`),'#582476');
 
  // BLOCK 6 TOP5
  outerBlock(2034,612,506,575,C.red,'#fff');sectionHead('6','TOP 5 VẤN ĐỀ ƯU TIÊN',2034,612,506,C.red,46);priorities(d).forEach((p,i)=>{let y=674+i*102;ctx.beginPath();ctx.arc(2062,y+22,16,0,Math.PI*2);ctx.fillStyle=C.red;ctx.fill();circleText(i+1,2062,y+22,18,'#fff');miniIcon(p.icon,2110,y+26,C.navy,1.05);wrap(p.title,2146,y,368,18,C.text,true,'left',1.15,2);tx(p.value,2146,y+49,25,C.red,true);tx(p.sub,2270,y+53,19,C.red,true);if(i<4)line(2050,y+92,2522,y+92,'#cfd5de',1.6)});
@@ -609,7 +628,7 @@ function draw(){
  outerBlock(20,1418,650,269,C.navy,'#fff');sectionHead('8',state.tab==='month'?`KẾT LUẬN THÁNG ${m.split('/')[0]}`:'KẾT LUẬN KỲ BÁO CÁO',20,1418,650,C.navy,46);miniIcon('target',83,1574,C.navy,1.5);ins.forEach((t,i)=>{ctx.fillStyle='#0a4cbd';ctx.beginPath();ctx.arc(156,1506+i*54,7,0,Math.PI*2);ctx.fill();wrap(t,178,1492+i*54,458,18,C.text,true,'left',1.2,2)});
 
  // FOOTER BLOCK 9
- outerBlock(686,1418,1854,269,C.navy,'#fff');sectionHead('9',state.tab==='month'?'ƯU TIÊN HÀNH ĐỘNG THÁNG TIẾP THEO':'ƯU TIÊN HÀNH ĐỘNG KỲ TIẾP THEO',686,1418,1854,C.navy,46);let ac=actions(d),gap=8,aw=(1830-gap*4)/5;ac.forEach((a,i)=>{let x=698+i*(aw+gap);rr(x,1476,aw,195,10,'#fff');if(i)line(x-4,1490,x-4,1657,'#c9d0dc');tx(`${i+1}. ${a.title}`,x+aw/2,1488,20,C.navy,true,'center');miniIcon(a.icon,x+38,1550,C.navy,1.25);a.body.slice(0,2).forEach((b,j)=>wrap('• '+shortText(b,48),x+74,1527+j*62,aw-90,18,C.text,true,'left',1.2,2))});
+ outerBlock(686,1418,1854,269,C.navy,'#fff');sectionHead('9',state.tab==='month'?'ƯU TIÊN HÀNH ĐỘNG THÁNG TIẾP THEO':'ƯU TIÊN HÀNH ĐỘNG KỲ TIẾP THEO',686,1418,1854,C.navy,46);let ac=actions(d),gap=8,aw=(1830-gap*4)/5;ac.forEach((a,i)=>{let x=698+i*(aw+gap);rr(x,1476,aw,195,10,'#fff');if(i)line(x-4,1490,x-4,1657,'#c9d0dc');tx(`${i+1}. ${a.title}`,x+aw/2,1488,20,C.navy,true,'center');miniIcon(a.icon,x+38,1550,C.navy,1.25);a.body.slice(0,2).forEach((b,j)=>wrap('• '+noFinalDot(b),x+74,1527+j*62,aw-90,17,C.text,true,'left',1.18,2))});
 
  $('#previewMeta').textContent=`2560 × 1707 px • ${state.detectedLabel} • ${state.runDays||'—'} ngày thực chạy • ${state.issues.filter(x=>x.type!=='ok').length} cảnh báo`;
 }
