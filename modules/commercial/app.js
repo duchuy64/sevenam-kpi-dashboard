@@ -71,6 +71,8 @@ function num(v){
 }
 function daysInclusive(a,b){if(!a||!b)return 0;let x=new Date(a+'T00:00:00'),y=new Date(b+'T00:00:00');return Math.max(0,Math.floor((y-x)/86400000)+1)}
 function isoDate(y,m,d){return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`}
+function addDaysISO(s,n){let d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return isoDate(d.getFullYear(),d.getMonth()+1,d.getDate())}
+function firstDayOfMonthISO(s){let d=new Date(s+'T00:00:00');return isoDate(d.getFullYear(),d.getMonth()+1,1)}
 function parseWeekLabel(label,fallbackYear){let m=String(label||'').match(/tuần\s*(\d+).*?\(?\s*(\d{1,2})\s*[-–]\s*(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/i);if(!m)return null;let y=m[5]?Number(m[5]):fallbackYear;if(y<100)y+=2000;let mo=Number(m[4]);return{key:'week'+m[1],type:'week',index:Number(m[1]),label:`Tuần ${m[1]} (${m[2]}-${m[3]}/${String(mo).padStart(2,'0')})`,from:isoDate(y,mo,Number(m[2])),to:isoDate(y,mo,Number(m[3]))}}
 function overlapDays(a1,a2,b1,b2){let s=a1>b1?a1:b1,e=a2<b2?a2:b2;return s<=e?daysInclusive(s,e):0}
 function isAdditiveUnit(unit,name=''){let u=norm(unit),n=norm(name);if(u.includes('%')||u.includes('lan')||u.includes('tr don'))return false;if(n==='roas'||n==='cp/tc'||n.startsWith('cr ')||n.includes('chiet khau')||n==='aov')return false;return true}
@@ -80,51 +82,38 @@ function parseWide(txt){
  let headerIdx=rows.findIndex(a=>norm(a[0]).includes('stt')&&norm(a[1]).includes('chi tieu'));
  if(headerIdx<0)return null;
  let maxCols=Math.max(...rows.map(a=>a.length));
- if(maxCols<12)return null;
-
+ if(maxCols<7)return null;
  let group=rows[headerIdx-1]||[];
- let fallback=Number((reportDates()?.to||'2026-01-01').slice(0,4))||2026;
- let periods=[{key:'month',type:'month',index:0,label:'TỔNG THÁNG',start:4,actualCol:4,targetCol:5,pctCol:6,insightCol:null,actionCol:null}];
- let canonicalStarts=[7,12,17,22,27,32];
+ let fallback=Number((state.weekDates?.to||state.monthDates?.to||'2026-01-01').slice(0,4))||2026;
+ let periods=[{key:'month',type:'month',index:0,label:'TỔNG THÁNG',start:4,actualCol:4,targetCol:5,pctCol:6,insightCol:null,actionCol:null,from:null,to:null}];
  let labels=group.map((x,i)=>({i,label:String(x||'').trim()})).filter(x=>/tuần\s*\d+/i.test(x.label));
-
+ let canonicalStarts=[7,12,17,22,27,32,37,42];
  labels.forEach((x,i)=>{
-   let pw=parseWeekLabel(x.label,fallback)||{key:'week'+(i+1),type:'week',index:i+1,label:x.label,from:null,to:null};
-   let c=canonicalStarts[i]??x.i;
-   Object.assign(pw,{start:c,actualCol:c,targetCol:c+1,pctCol:c+2,insightCol:c+3,actionCol:c+4});
-   periods.push(pw)
+   let pw=parseWeekLabel(x.label,fallback)||{key:'week'+(i+1),type:'week',index:i+1,label:x.label||`Tuần ${i+1}`,from:null,to:null};
+   let c=(x.i>=7&&((x.i-7)%5===0))?x.i:(canonicalStarts[i]??x.i);
+   Object.assign(pw,{start:c,actualCol:c,targetCol:c+1,pctCol:c+2,insightCol:c+3,actionCol:c+4});periods.push(pw)
  });
-
- if(labels.length===0){
-   canonicalStarts.forEach((c,i)=>{
-     if(c<maxCols){
-       let lab=(group[c]||`Tuần ${i+1}`).trim();
-       let pw=parseWeekLabel(lab,fallback)||{key:'week'+(i+1),type:'week',index:i+1,label:lab||`Tuần ${i+1}`,from:null,to:null};
-       Object.assign(pw,{start:c,actualCol:c,targetCol:c+1,pctCol:c+2,insightCol:c+3,actionCol:c+4});
-       periods.push(pw)
-     }
-   })
- }
-
+ if(labels.length===0){canonicalStarts.forEach((c,i)=>{if(c<maxCols){let lab=(group[c]||`Tuần ${i+1}`).trim();let pw=parseWeekLabel(lab,fallback)||{key:'week'+(i+1),type:'week',index:i+1,label:lab||`Tuần ${i+1}`,from:null,to:null};Object.assign(pw,{start:c,actualCol:c,targetCol:c+1,pctCol:c+2,insightCol:c+3,actionCol:c+4});periods.push(pw)}})}
  let dataRows=rows.slice(headerIdx+1).filter(a=>(a[1]||'').trim()).map(a=>({stt:a[0]||'',name:(a[1]||'').trim(),dept:(a[2]||'').trim(),unit:(a[3]||'').trim(),cells:a}));
- let periodRows={};
- periods.forEach(p=>{
-   periodRows[p.key]=dataRows.map(r=>({
-     stt:r.stt,name:r.name,dept:r.dept,unit:r.unit,
-     actual:num(r.cells[p.actualCol]),target:num(r.cells[p.targetCol]),pct:num(r.cells[p.pctCol]),
-     insight:p.insightCol==null?'':(r.cells[p.insightCol]||'').trim(),
-     action:p.actionCol==null?'':(r.cells[p.actionCol]||'').trim(),
-     periodKey:p.key
-   })).filter(r=>r.name)
- });
-
- let weeks=periods.filter(p=>p.type==='week'&&p.from&&p.to);
- if(weeks.length){
-   let dt=new Date(weeks[0].from+'T00:00:00'),mo=dt.getMonth()+1,y=dt.getFullYear(),lastDay=new Date(y,mo,0).getDate();
-   periods[0].from=isoDate(y,mo,1);periods[0].to=isoDate(y,mo,lastDay);
-   periods[0].label=`TỔNG THÁNG ${String(mo).padStart(2,'0')}/${y}`
- }
+ let periodRows={};periods.forEach(p=>{periodRows[p.key]=dataRows.map(r=>({stt:r.stt,name:r.name,dept:r.dept,unit:r.unit,actual:num(r.cells[p.actualCol]),target:num(r.cells[p.targetCol]),pct:num(r.cells[p.pctCol]),insight:p.insightCol==null?'':(r.cells[p.insightCol]||'').trim(),action:p.actionCol==null?'':(r.cells[p.actionCol]||'').trim(),periodKey:p.key})).filter(r=>r.name)});
+ let weeks=periods.filter(p=>p.type==='week'&&p.from&&p.to);if(weeks.length){let dt=new Date(weeks[0].from+'T00:00:00'),mo=dt.getMonth()+1,y=dt.getFullYear(),lastDay=new Date(y,mo,0).getDate();periods[0].from=isoDate(y,mo,1);periods[0].to=isoDate(y,mo,lastDay);periods[0].label=`TỔNG THÁNG ${String(mo).padStart(2,'0')}/${y}`}
  return{periods,periodRows,dataRows}
+}
+function weekHasRealData(p,periodRows){
+ let rows=periodRows[p.key]||[];
+ const keys=['doanh so marketing tao don','doanh thu marketing thanh cong','doanh so tao don','doanh thu thanh cong','doanh thu khach quay lai','lead','so don tao'];
+ for(const r of rows){if(r.actual==null||!Number.isFinite(r.actual))continue;let n=norm(r.name);if(keys.some(k=>n===k||n.includes(k)||k.includes(n))&&Math.abs(r.actual)>1e-9)return true}
+ return rows.some(r=>r.actual!=null&&Number.isFinite(r.actual)&&Math.abs(r.actual)>1e-9)
+}
+function applyAutoDateDefaults(wide){
+ let weeks=wide.periods.filter(p=>p.type==='week'&&p.from&&p.to).sort((a,b)=>a.index-b.index);
+ let active=weeks.filter(p=>weekHasRealData(p,wide.periodRows));if(!active.length)return false;
+ let latest=active[active.length-1],summary=addDaysISO(latest.to,2);
+ state.weekDates={from:latest.from,to:latest.to,sum:summary};
+ state.monthDates={from:firstDayOfMonthISO(latest.from),to:latest.to,sum:summary};
+ state.autoDetectedWeek=latest.label;
+ let month=wide.periods.find(p=>p.type==='month');if(month){month.from=state.monthDates.from;month.to=state.monthDates.to;month.label=`TỔNG THÁNG LŨY KẾ ${dateVN(state.monthDates.from)} – ${dateVN(state.monthDates.to)}`}
+ syncDatesToUI();return true
 }
 function parseLegacy(txt){let lines=txt.replace(/\r/g,'').split('\n').filter(x=>x.trim());if(lines.length<2)return[];let start=norm(lines[0]).includes('chi tieu')?1:0;return lines.slice(start).map(line=>{let a=line.split('\t');return{stt:a[0]||'',name:(a[1]||'').trim(),dept:(a[2]||'').trim(),unit:(a[3]||'').trim(),actual:num(a[4]),target:num(a[5]),pct:num(a[6]),insight:(a[7]||'').trim(),action:(a[8]||'').trim()}}).filter(r=>r.name)}
 function rowMap(rows){let m=new Map();rows.forEach(r=>m.set(norm(r.name),r));return m}
@@ -180,30 +169,28 @@ function buildSelectedRows(){
  state.detectedLabel=selected.map(p=>p.label).join(' + ')||'—';
  updatePeriodUI()
 }
-function parse(txt){let wide=parseWide(txt);if(wide){state.periods=wide.periods;state.periodRows=wide.periodRows;state.rawRows=wide.dataRows;buildSelectedRows();return state.rows}state.periods=[];state.periodRows={};state.comparePrev=[];state.compareNext=[];state.runDays=daysInclusive(reportDates().from,reportDates().sum&&reportDates().sum<reportDates().to?reportDates().sum:reportDates().to);state.detectedLabel='Dữ liệu 9 cột';updatePeriodUI();return parseLegacy(txt)}
+function parse(txt,autoDates=false){let wide=parseWide(txt);if(wide){state.periods=wide.periods;state.periodRows=wide.periodRows;state.rawRows=wide.dataRows;if(autoDates)applyAutoDateDefaults(wide);buildSelectedRows();return state.rows}state.periods=[];state.periodRows={};state.comparePrev=[];state.compareNext=[];state.runDays=daysInclusive(reportDates().from,reportDates().sum&&reportDates().sum<reportDates().to?reportDates().sum:reportDates().to);state.detectedLabel='Dữ liệu 9 cột';updatePeriodUI();return parseLegacy(txt)}
 function compareRow(rows,name){let n=norm(name);return rows.find(r=>norm(r.name)===n)||rows.find(r=>norm(r.name).includes(n)||n.includes(norm(r.name)))}
 function compareMetric(name){let cur=find(name)?.actual??null,prev=compareRow(state.comparePrev,name)?.actual??null,next=compareRow(state.compareNext,name)?.actual??null;let delta=cur!=null&&prev!=null&&prev!==0?(cur-prev)/Math.abs(prev)*100:null;return{cur,prev,next,delta}}
 function updatePeriodUI(){if($('#runDays'))$('#runDays').value=state.runDays?`${state.runDays} ngày`:'—';if($('#periodDetected'))$('#periodDetected').value=state.detectedLabel||'—'}
 function find(name){
- let n=norm(name);
- const groups=[
-  ['doanh so marketing tao don','doanh thu marketing tao don'],
-  ['doanh so tao don','tao don sale online'],
-  ['doanh thu thanh cong','thanh cong sale online'],
-  ['kh can cham soc','kh can cs'],
-  ['luot cham soc','luot cs'],
-  ['ti le chot','ty le chot','cr tao don'],
-  ['ti le hoan','ty le hoan','cr hoan'],
-  ['tong so don treo 5+6+7+8','tong so don treo','don treo']
- ];
- let candidates=[n];
- for(const g of groups){if(g.includes(n)){candidates=[...new Set([...candidates,...g])];break}}
- for(const c of candidates){let r=state.rows.find(x=>norm(x.name)===c);if(r)return r}
- for(const c of candidates){let r=state.rows.find(x=>norm(x.name).includes(c)||c.includes(norm(x.name)));if(r)return r}
+ let n=norm(name);const groups=[['doanh so marketing tao don','doanh thu marketing tao don'],['doanh so tao don','tao don sale online'],['doanh thu thanh cong','thanh cong sale online'],['kh can cham soc','kh can cs'],['luot cham soc','luot cs'],['ti le chot','ty le chot','cr tao don'],['ti le hoan','ty le hoan','cr hoan'],['tong so don treo 5+6+7+8','tong so don treo','don treo']];
+ let candidates=[n];for(const g of groups){if(g.includes(n)){candidates=[...new Set([...candidates,...g])];break}}
+ for(const c of candidates){let exact=state.rows.filter(x=>norm(x.name)===c);if(exact.length===1)return exact[0];if(exact.length>1){if(['doanh so tao don','tao don sale online','doanh thu thanh cong','thanh cong sale online'].includes(c)){let sale=exact.find(x=>norm(x.dept).includes('sale'));if(sale)return sale}return exact[0]}}
+ for(const c of candidates){let hits=state.rows.filter(x=>norm(x.name).includes(c)||c.includes(norm(x.name)));if(['doanh so tao don','tao don sale online','doanh thu thanh cong','thanh cong sale online'].includes(c)){let sale=hits.find(x=>norm(x.dept).includes('sale'));if(sale)return sale}if(hits.length)return hits[0]}
 }
 const val=n=>find(n)?.actual??null, tar=n=>find(n)?.target??null;
 function firstVal(...names){for(const n of names){let r=find(n);if(r?.actual!=null)return r.actual}return null}
 function firstTar(...names){for(const n of names){let r=find(n);if(r?.target!=null)return r.target}return null}
+function findDept(name,dept){
+ let n=norm(name),d=norm(dept);
+ let exact=state.rows.find(r=>norm(r.name)===n&&norm(r.dept).includes(d));
+ if(exact)return exact;
+ return state.rows.find(r=>(norm(r.name).includes(n)||n.includes(norm(r.name)))&&norm(r.dept).includes(d))
+}
+function valDept(name,dept){return findDept(name,dept)?.actual??null}
+function tarDept(name,dept){return findDept(name,dept)?.target??null}
+
 function fmtNum(v,d=2){if(v==null||!Number.isFinite(v))return'—';return v.toLocaleString('vi-VN',{minimumFractionDigits:d,maximumFractionDigits:d})}
 function money(v,force2=true){if(v==null||!Number.isFinite(v))return'—';return `${v.toLocaleString('vi-VN',{minimumFractionDigits:force2?2:0,maximumFractionDigits:2})} tr`}
 function signedMoney(v){if(v==null||!Number.isFinite(v))return'—';return `${v>=0?'+':''}${v.toLocaleString('vi-VN',{minimumFractionDigits:2,maximumFractionDigits:2})} tr`}
@@ -218,103 +205,98 @@ function scopeDetect(){let channels=[['Ads','Doanh thu Ads'],['Livestream','Doan
 function derived(){
  let scope=scopeDetect();
 
- // ===== MKT GỐC =====
- let mCreateRaw=firstVal('Doanh số Marketing (Tạo đơn)','Doanh thu Marketing (Tạo đơn)'),
-     mCreateTar=firstTar('Doanh số Marketing (Tạo đơn)','Doanh thu Marketing (Tạo đơn)'),
-     mSuccRaw=firstVal('Doanh thu Marketing (Thành công)'),
-     mSuccTar=firstTar('Doanh thu Marketing (Thành công)'),
-     shopee=firstVal('Doanh thu Shopee');
+ // ===== MKT =====
+ // Doanh thu MKT dùng tổng 4 kênh: Ads + Livestream + Shopee + Website
+ let ads=valDept('Doanh thu Ads','MKT'),
+     live=valDept('Doanh thu Livestream','MKT'),
+     shopee=valDept('Doanh thu Shopee','MKT'),
+     web=valDept('Doanh thu Website','MKT');
 
- // ===== SALE GỐC NHẬP =====
- let saleCreateInput=firstVal('Doanh số tạo đơn','Tạo đơn Sale Online'),
-     saleCreateTar=firstTar('Doanh số tạo đơn','Tạo đơn Sale Online'),
-     saleSuccInput=firstVal('Doanh thu thành công','Thành công Sale Online'),
-     saleSuccTar=firstTar('Doanh thu thành công','Thành công Sale Online');
+ let adsTar=tarDept('Doanh thu Ads','MKT'),
+     liveTar=tarDept('Doanh thu Livestream','MKT'),
+     shopeeTar=tarDept('Doanh thu Shopee','MKT'),
+     webTar=tarDept('Doanh thu Website','MKT');
 
- // Quy ước đối soát MKT ↔ Sale: lấy giá trị lớn hơn làm "tham chiếu tích cực".
- let saleCreateDerived=(mCreateRaw!=null&&shopee!=null)?mCreateRaw-shopee:null,
-     saleSuccDerived=(mSuccRaw!=null&&shopee!=null)?mSuccRaw-shopee:null;
+ let mSucc=(ads||0)+(live||0)+(shopee||0)+(web||0);
+ let mSuccTar=[adsTar,liveTar,shopeeTar,webTar].some(v=>v!=null)
+   ?(adsTar||0)+(liveTar||0)+(shopeeTar||0)+(webTar||0)
+   :null;
 
- let saleCreatePositive=(saleCreateInput!=null&&saleCreateDerived!=null)
-      ?Math.max(saleCreateInput,saleCreateDerived)
-      :(saleCreateInput??saleCreateDerived),
-     saleSuccPositive=(saleSuccInput!=null&&saleSuccDerived!=null)
-      ?Math.max(saleSuccInput,saleSuccDerived)
-      :(saleSuccInput??saleSuccDerived);
+ // Tạo đơn MKT vẫn lấy đúng dòng tổng MKT
+ let mCreate=valDept('Doanh số Marketing (Tạo đơn)','MKT');
+ if(mCreate==null)mCreate=valDept('Doanh thu Marketing (Tạo đơn)','MKT');
+ let mCreateTar=tarDept('Doanh số Marketing (Tạo đơn)','MKT');
+ if(mCreateTar==null)mCreateTar=tarDept('Doanh thu Marketing (Tạo đơn)','MKT');
 
- // ===== SALE CHI TIẾT – NGUỒN GỐC NỘI BỘ =====
- let createdOrders=firstVal('Số đơn tạo'),
-     successOrdersInput=firstVal('Số đơn thành công'),
-     dataSale=firstVal('Tổng data Sale');
+ // ===== SALE =====
+ // KHÓA NGUỒN: chỉ lấy đúng dòng "Doanh số tạo đơn" thuộc bộ phận Sale
+ let saleCreateInput=valDept('Doanh số tạo đơn','Sale'),
+     saleCreateTar=tarDept('Doanh số tạo đơn','Sale');
 
- // Doanh số Đơn treo bắt buộc tính lại từ 4 trạng thái con.
- let saleNew=firstVal('DS Mới')||0,
-     saleWaitStock=firstVal('DS Chờ hàng')||0,
-     saleConfirmed=firstVal('DS Đã xác nhận')||0,
-     saleWaitTransfer=firstVal('DS Chờ chuyển hàng')||0,
-     pending=saleNew+saleWaitStock+saleConfirmed+saleWaitTransfer;
+ // Doanh thu thành công Sale cũng khóa theo bộ phận Sale
+ let saleSuccInput=valDept('Doanh thu thành công','Sale'),
+     saleSuccTar=tarDept('Doanh thu thành công','Sale');
 
- // Nếu có số đơn từng trạng thái con thì cộng lại; nếu không có thì lấy số tổng đầu tiên đã nhập.
- let cntNew=firstVal('Số đơn Mới','Đơn Mới'),
-     cntWaitStock=firstVal('Số đơn Chờ hàng','Đơn Chờ hàng'),
-     cntConfirmed=firstVal('Số đơn Đã xác nhận','Đơn Đã xác nhận'),
-     cntWaitTransfer=firstVal('Số đơn Chờ chuyển hàng','Đơn Chờ chuyển hàng');
- let childPendingCounts=[cntNew,cntWaitStock,cntConfirmed,cntWaitTransfer].filter(v=>v!=null);
- let pendingOrdersInput=firstVal('Tổng số đơn Treo (5+6+7+8)','Tổng số đơn Treo','Đơn treo');
- let pendingOrders=childPendingCounts.length
-      ?childPendingCounts.reduce((a,b)=>a+b,0)
-      :pendingOrdersInput;
+ let createdOrders=valDept('Số đơn tạo','Sale'),
+     successOrders=valDept('Số đơn thành công','Sale'),
+     dataSale=valDept('Tổng data Sale','Sale');
 
- // Đang giao: ưu tiên dòng chuẩn đầu tiên; fallback tên cũ.
- let delivering=firstVal('DS Đang giao','Giá trị Chờ vận chuyển')||0,
-     deliveringOrders=firstVal('Số đơn Đang giao','Số đơn Chờ vận chuyển');
+ let saleNew=valDept('DS Mới','Sale')||0,
+     saleWaitStock=valDept('DS Chờ hàng','Sale')||0,
+     saleConfirmed=valDept('DS Đã xác nhận','Sale')||0,
+     saleWaitTransfer=valDept('DS Chờ chuyển hàng','Sale')||0;
 
- // Thành công: ưu tiên số Sale gốc đầu tiên; fallback số đối soát tích cực.
- let saleSuccInternal=saleSuccInput??saleSuccPositive??0,
-     successOrders=successOrdersInput;
+ let pending=saleNew+saleWaitStock+saleConfirmed+saleWaitTransfer;
 
- // Hoàn: ưu tiên dòng chuẩn đầu tiên; fallback các tên cũ nếu có.
- let refund=firstVal('Doanh số Hoàn','Doanh thu Hoàn','Giá trị Hoàn')||0,
-     refundOrders=firstVal('Số đơn hoàn','Đơn hoàn');
+ let pendingOrders=valDept('Tổng số đơn Treo (5+6+7+8)','Sale');
+ if(pendingOrders==null)pendingOrders=valDept('Tổng số đơn Treo','Sale');
+ if(pendingOrders==null)pendingOrders=valDept('Đơn treo','Sale');
 
- // ===== KHÓA LOGIC PHỄU NỘI BỘ =====
- // Tạo đơn hiển thị trên dashboard = tổng 4 trạng thái nội bộ.
- // Như vậy mọi số trong ảnh luôn khớp tuyệt đối.
- let saleStatusSum=(pending||0)+(delivering||0)+(saleSuccInternal||0)+(refund||0);
- let saleCreate=(saleStatusSum>0)?saleStatusSum:(saleCreatePositive??saleCreateInput??0);
- let saleSucc=saleSuccInternal;
+ let delivering=valDept('DS Đang giao','Sale')||0,
+     deliveringOrders=valDept('Số đơn Đang giao','Sale'),
+     refund=valDept('Doanh số Hoàn','Sale')||0,
+     refundOrders=valDept('Số đơn hoàn','Sale');
 
- // Số đơn: nếu đủ 4 trạng thái thì lấy tổng trạng thái; nếu chưa đủ thì giữ số tạo nhập.
- let orderParts=[pendingOrders,deliveringOrders,successOrders,refundOrders];
- let haveAllOrderParts=orderParts.every(v=>v!=null);
- let orderStatusSum=haveAllOrderParts?orderParts.reduce((a,b)=>a+b,0):null;
- let createdOrdersDisplay=orderStatusSum!=null?orderStatusSum:createdOrders;
+ // Tạo đơn hiển thị = đúng số nguồn Sale đã nhập.
+ // Không thay bằng MKT-Shopee, không thay bằng tổng phễu.
+ let saleCreate=saleCreateInput;
+ let saleSucc=saleSuccInput;
 
- // ===== CHỈ SỐ PHỤ: TÍNH TỪ SỐ GỐC TỪNG PHẦN =====
- let crCreate=createdOrders&&dataSale?createdOrders/dataSale*100:firstVal('Tỉ lệ chốt','Tỷ lệ chốt','CR tạo đơn'),
-     crSuccess=saleCreateInput&&saleSuccInput?saleSuccInput/saleCreateInput*100:firstVal('CR thành công'),
-     crRefund=createdOrders&&refundOrders?refundOrders/createdOrders*100:firstVal('Tỉ lệ hoàn','Tỷ lệ hoàn','CR hoàn'),
-     aov=saleCreateInput&&createdOrders?saleCreateInput/createdOrders:firstVal('AOV');
+ // Chỉ số phụ tính từ số gốc Sale
+ let crCreate=createdOrders&&dataSale?createdOrders/dataSale*100:valDept('Tỉ lệ chốt','Sale'),
+     crSuccess=saleCreate&&saleSucc?saleSucc/saleCreate*100:null,
+     crRefund=createdOrders&&refundOrders?refundOrders/createdOrders*100:valDept('Tỉ lệ hoàn','Sale'),
+     aov=saleCreate&&createdOrders?saleCreate/createdOrders:valDept('AOV','Sale');
 
- // Chênh lệch chỉ để cảnh báo, không dùng làm số hiển thị.
- let saleDiffVsInput=saleCreateInput!=null?saleCreate-saleCreateInput:null,
-     saleDiffVsPositive=saleCreatePositive!=null?saleCreate-saleCreatePositive:null,
-     orderDiffVsInput=(createdOrders!=null&&orderStatusSum!=null)?createdOrdersDisplay-createdOrders:null;
+ // Chênh phễu chỉ để cảnh báo
+ let saleStatusSum=(pending||0)+(delivering||0)+(saleSucc||0)+(refund||0),
+     saleDiff=saleCreate!=null?saleCreate-saleStatusSum:null;
+
+ let orderStatusSum=[pendingOrders,deliveringOrders,successOrders,refundOrders].every(v=>v!=null)
+   ?pendingOrders+deliveringOrders+successOrders+refundOrders
+   :null;
 
  // ===== CSKH =====
  let cKey='Doanh thu khách quay lại',
-     cRev=val(cKey),
-     cTar=tar(cKey);
+     cRev=valDept(cKey,'CSKH'),
+     cTar=tarDept(cKey,'CSKH');
 
- let channels=scope.channels.map(c=>({...c,p:c.v!=null&&c.t?c.v/c.t*100:null})),
-     mcost=val('Chi phí Marketing tổng'),
-     roas=mSuccRaw!=null&&mcost?mSuccRaw/mcost:null,
-     cp=mSuccRaw!=null&&mcost?mcost/mSuccRaw*100:null;
+ let channels=[
+   {name:'Ads',key:'Doanh thu Ads',v:ads,t:adsTar},
+   {name:'Livestream',key:'Doanh thu Livestream',v:live,t:liveTar},
+   {name:'Shopee',key:'Doanh thu Shopee',v:shopee,t:shopeeTar},
+   {name:'Website',key:'Doanh thu Website',v:web,t:webTar}
+ ].map(c=>({...c,p:c.v!=null&&c.t?c.v/c.t*100:null}));
 
- let csTouch=firstVal('Lượt Chăm sóc','Lượt CS'),
-     csConn=val('Kết nối thành công'),
-     csNeed=val('KH có nhu cầu'),
-     csRet=val('Khách quay lại'),
+ let mcost=valDept('Chi phí Marketing tổng','MKT'),
+     roas=mSucc!=null&&mcost?mSucc/mcost:null,
+     cp=mSucc!=null&&mcost?mcost/mSucc*100:null;
+
+ let csTouch=valDept('Lượt Chăm sóc','CSKH');
+ if(csTouch==null)csTouch=valDept('Lượt CS','CSKH');
+ let csConn=valDept('Kết nối thành công','CSKH'),
+     csNeed=valDept('KH có nhu cầu','CSKH'),
+     csRet=valDept('Khách quay lại','CSKH'),
      connRate=csTouch&&csConn?csConn/csTouch*100:null,
      needRate=csConn&&csNeed?csNeed/csConn*100:null,
      retRate=csNeed&&csRet?csRet/csNeed*100:null,
@@ -322,20 +304,18 @@ function derived(){
 
  return{
    scope,
-   mCreate:mCreateRaw,mCreateTar,mSucc:mSuccRaw,mSuccTar,
+   mCreate,mCreateTar,mSucc,mSuccTar,
    saleCreate,saleSucc,saleCreateTar,saleSuccTar,
-   saleCreateInput,saleSuccInput,saleCreateDerived,saleSuccDerived,
-   saleCreatePositive,saleSuccPositive,
-   createdOrders,createdOrdersDisplay,successOrders,dataSale,
+   saleCreateInput,saleSuccInput,
+   createdOrders,successOrders,dataSale,
    saleNew,saleWaitStock,saleConfirmed,saleWaitTransfer,
-   pending,pendingOrders,pendingOrdersInput,
-   cntNew,cntWaitStock,cntConfirmed,cntWaitTransfer,
-   delivering,deliveringOrders,refund,refundOrders,
+   pending,pendingOrders,delivering,deliveringOrders,refund,refundOrders,
    crCreate,crSuccess,crRefund,aov,
-   saleStatusSum,orderStatusSum,
-   saleDiffVsInput,saleDiffVsPositive,orderDiffVsInput,
-   cKey,cRev,cTar,channels,channelSum:scope.channelSum,channelUsable:true,
-   mcost,roas,cp,csTouch,csConn,csNeed,csRet,connRate,needRate,retRate,csAov
+   saleStatusSum,saleDiff,orderStatusSum,
+   cKey,cRev,cTar,
+   channels,channelSum:mSucc,channelUsable:true,
+   mcost,roas,cp,
+   csTouch,csConn,csNeed,csRet,connRate,needRate,retRate,csAov
  }
 }
 
@@ -345,7 +325,6 @@ function assess(){
  state.scope=d.scope;
  if(!state.rows.length){state.issues.push({type:'err',text:'Không đọc được dữ liệu.'});return}
 
- // % HT source check
  state.rows.forEach(r=>{
    if(r.actual!=null&&r.target){
      let calc=r.actual/r.target*100;
@@ -355,66 +334,49 @@ function assess(){
    }
  });
 
- // MKT ↔ Sale: tham chiếu tích cực, nhưng nội bộ Sale phải ưu tiên khớp phễu.
- if(d.saleCreateInput!=null&&d.saleCreateDerived!=null&&Math.abs(d.saleCreateInput-d.saleCreateDerived)>.1){
-   state.issues.push({type:'warn',text:`MKT → SALE tạo đơn lệch: Sale nhập ${money(d.saleCreateInput)}, MKT-Shopee ${money(d.saleCreateDerived)}. Tham chiếu tích cực = ${money(d.saleCreatePositive)}; dashboard nội bộ Sale dùng tổng 4 trạng thái = ${money(d.saleCreate)} để bảo đảm phễu khớp.`})
- }
- if(d.saleSuccInput!=null&&d.saleSuccDerived!=null&&Math.abs(d.saleSuccInput-d.saleSuccDerived)>.1){
-   state.issues.push({type:'warn',text:`MKT → SALE thành công lệch: Sale nhập ${money(d.saleSuccInput)}, MKT-Shopee ${money(d.saleSuccDerived)}. Tool giữ số thành công Sale gốc đầu tiên = ${money(d.saleSucc)} để đồng nhất phễu nội bộ.`})
+ // Nguồn Sale đã khóa theo dòng + bộ phận
+ if(d.saleCreate!=null){
+   state.issues.push({type:'ok',text:`SALE ONLINE tạo đơn đang lấy đúng dòng "Doanh số tạo đơn" thuộc bộ phận Sale = ${money(d.saleCreate)}.`})
  }
 
- // Đơn treo doanh số luôn được tính từ 4 trạng thái con.
- let pendingInputLegacy=firstVal('Giá trị đơn treo','Doanh số đơn treo','DS Đơn treo');
- if(pendingInputLegacy!=null&&Math.abs(pendingInputLegacy-d.pending)>.1){
-   state.issues.push({type:'warn',text:`Đơn treo được tính lại từ Mới + Chờ hàng + Đã xác nhận + Chờ chuyển = ${money(d.pending)}; số tổng nhập ${money(pendingInputLegacy)} không được dùng.`})
+ // Nguồn MKT thành công = tổng 4 kênh
+ state.issues.push({type:'ok',text:`Doanh thu MKT đang lấy tổng Ads + Livestream + Shopee + Website = ${money(d.mSucc)}.`});
+
+ // Cảnh báo phễu nội bộ nếu chưa cân
+ if(d.saleCreate!=null&&d.saleDiff!=null&&Math.abs(d.saleDiff)>.5){
+   state.issues.push({type:'warn',text:`Sale – Phễu chưa cân: Tạo đơn ${money(d.saleCreate)}; Treo + Đang giao + Thành công + Hoàn = ${money(d.saleStatusSum)}; lệch ${signedMoney(d.saleDiff)}.`})
  }
 
- // Nếu có count con thì override tổng số đơn treo.
- if([d.cntNew,d.cntWaitStock,d.cntConfirmed,d.cntWaitTransfer].some(v=>v!=null)){
-   if(d.pendingOrdersInput!=null&&d.pendingOrders!=null&&Math.abs(d.pendingOrdersInput-d.pendingOrders)>=1){
-     state.issues.push({type:'warn',text:`Tổng số đơn treo được tính lại từ các trạng thái con = ${fmt(d.pendingOrders,'Đơn')} đơn; số tổng nhập ${fmt(d.pendingOrdersInput,'Đơn')} đơn không được dùng.`})
-   }
- }else if(d.pendingOrdersInput!=null){
-   state.issues.push({type:'warn',text:`Chưa có số đơn chi tiết Mới/Chờ hàng/Đã xác nhận/Chờ chuyển; Tổng số đơn treo tạm lấy số đầu tiên đã nhập = ${fmt(d.pendingOrdersInput,'Đơn')} đơn.`})
- }
-
- // Tạo đơn nội bộ bắt buộc khớp 4 trạng thái.
- if(d.saleCreateInput!=null&&Math.abs(d.saleDiffVsInput||0)>.1){
-   state.issues.push({type:'warn',text:`Sale nội bộ đã tự cân: Treo ${money(d.pending)} + Đang giao ${money(d.delivering)} + Thành công ${money(d.saleSucc)} + Hoàn ${money(d.refund)} = Tạo đơn ${money(d.saleCreate)}. Số tạo đơn nhập ${money(d.saleCreateInput)} lệch ${signedMoney(d.saleDiffVsInput)}.`})
- }
-
- // Số đơn cũng tự cân nếu đủ dữ liệu 4 trạng thái.
- if(d.orderStatusSum!=null&&d.createdOrders!=null&&Math.abs(d.orderDiffVsInput||0)>=1){
-   state.issues.push({type:'warn',text:`Số đơn nội bộ đã tự cân: Treo ${fmt(d.pendingOrders,'Đơn')} + Đang giao ${fmt(d.deliveringOrders,'Đơn')} + Thành công ${fmt(d.successOrders,'Đơn')} + Hoàn ${fmt(d.refundOrders,'Đơn')} = ${fmt(d.createdOrdersDisplay,'Đơn')} đơn; số đơn tạo nhập ${fmt(d.createdOrders,'Đơn')} lệch ${fmt(d.orderDiffVsInput,'Đơn')} đơn.`})
- }
-
- // Chỉ số phụ luôn kiểm theo số gốc.
- let inputClose=firstVal('Tỉ lệ chốt','Tỷ lệ chốt'),
-     inputRefund=firstVal('Tỉ lệ hoàn','Tỷ lệ hoàn'),
-     inputAov=firstVal('AOV');
+ let inputClose=valDept('Tỉ lệ chốt','Sale'),
+     inputRefund=valDept('Tỉ lệ hoàn','Sale'),
+     inputAov=valDept('AOV','Sale');
 
  if(d.createdOrders!=null&&d.dataSale){
    let calc=d.createdOrders/d.dataSale*100;
    if(inputClose!=null&&Math.abs(inputClose-calc)>.35)
-     state.issues.push({type:'warn',text:`Tỉ lệ chốt: nhập ${fmtNum(inputClose,2)}%, tính theo Số đơn tạo gốc / Tổng data = ${fmtNum(calc,2)}%. Dashboard dùng số tính.`})
+     state.issues.push({type:'warn',text:`Tỉ lệ chốt nhập ${fmtNum(inputClose,2)}%, hệ thống tính ${fmtNum(calc,2)}%.`})
  }
+
  if(d.createdOrders!=null&&d.refundOrders!=null&&d.createdOrders>0){
    let calc=d.refundOrders/d.createdOrders*100;
    if(inputRefund!=null&&Math.abs(inputRefund-calc)>.35)
-     state.issues.push({type:'warn',text:`Tỉ lệ hoàn: nhập ${fmtNum(inputRefund,2)}%, tính theo Số đơn hoàn / Số đơn tạo gốc = ${fmtNum(calc,2)}%. Dashboard dùng số tính.`})
+     state.issues.push({type:'warn',text:`Tỉ lệ hoàn nhập ${fmtNum(inputRefund,2)}%, hệ thống tính ${fmtNum(calc,2)}%.`})
  }
- if(d.saleCreateInput!=null&&d.createdOrders){
-   let calc=d.saleCreateInput/d.createdOrders;
+
+ if(d.saleCreate!=null&&d.createdOrders){
+   let calc=d.saleCreate/d.createdOrders;
    if(inputAov!=null&&Math.abs(inputAov-calc)>.03)
-     state.issues.push({type:'warn',text:`AOV: nhập ${fmtNum(inputAov,2)} tr/đơn, tính theo Doanh số tạo đơn gốc / Số đơn tạo gốc = ${fmtNum(calc,2)} tr/đơn. Dashboard dùng số tính.`})
+     state.issues.push({type:'warn',text:`AOV nhập ${fmtNum(inputAov,2)} tr/đơn, hệ thống tính ${fmtNum(calc,2)} tr/đơn.`})
  }
 
  if(state.tab==='month')
    state.issues.push({type:'ok',text:'BC2 THÁNG: lấy trực tiếp 3 cột Đã đạt / Target / % HT của TỔNG THÁNG.'});
+
  if(state.periods.length)
-   state.issues.push({type:'ok',text:`Đã nhận đúng form TỔNG THÁNG + ${state.periods.filter(p=>p.type==='week').length} tuần; kỳ đang dùng: ${state.detectedLabel}.`});
+   state.issues.push({type:'ok',text:`Kỳ đang dùng: ${state.detectedLabel}.`});
+
  if(!state.issues.some(x=>x.type==='err'))
-   state.issues.push({type:'ok',text:'Dashboard đã tự đồng bộ logic nội bộ Sale trước khi vẽ ảnh; mọi chênh lệch chỉ cảnh báo vàng.'})
+   state.issues.push({type:'ok',text:'Đã khóa nguồn KPI theo đúng dòng và đúng bộ phận trước khi dựng Dashboard.'})
 }
 
 function insightList(d){let a=[];let mp=d.mSucc!=null&&d.mSuccTar?d.mSucc/d.mSuccTar*100:null,sp=d.saleCreate!=null&&d.saleCreateTar?d.saleCreate/d.saleCreateTar*100:null,ssp=d.saleSucc!=null&&d.saleSuccTar?d.saleSucc/d.saleSuccTar*100:null,cpct=d.cRev!=null&&d.cTar?d.cRev/d.cTar*100:null;
@@ -639,6 +601,6 @@ function syncDatesToUI(){let d=reportDates();$('#dateFrom').value=d.from;$('#dat
 function syncDatesFromUI(){let d={from:$('#dateFrom').value,to:$('#dateTo').value,sum:$('#dateSummary').value};if(state.tab==='week')state.weekDates=d;else state.monthDates=d}
 function save(){localStorage.setItem('sevenam-commercial-dashboard-grid2560-bod-v6-fullblock-note',JSON.stringify({data:$('#dataInput').value,weekDates:state.weekDates,monthDates:state.monthDates}))}
 function load(){try{let s=JSON.parse(localStorage.getItem('sevenam-commercial-dashboard-grid2560-bod-v6-fullblock-note')||'{}');$('#dataInput').value=s.data||SAMPLE;state.weekDates=s.weekDates||state.weekDates;state.monthDates=s.monthDates||state.monthDates}catch(e){$('#dataInput').value=SAMPLE}}
-function run(msg=true){state.rows=parse($('#dataInput').value);if(state.periods.length)buildSelectedRows();assess();renderValidation();draw();save();if(msg)toast('Đã tự nhận kỳ & dựng Dashboard')}
-load();syncDatesToUI();$('#parseBtn').onclick=()=>run();$('#sampleBtn').onclick=()=>{$('#dataInput').value=SAMPLE;run()};document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{syncDatesFromUI();document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.tab=b.dataset.tab;syncDatesToUI();run(false)});['dateFrom','dateTo','dateSummary'].forEach(id=>$('#'+id).onchange=()=>{syncDatesFromUI();if(state.periods.length)buildSelectedRows();else state.rows=parse($('#dataInput').value);assess();renderValidation();draw();save()});$('#exportBtn').onclick=()=>{let a=document.createElement('a');a.download=`SEVENAM_${state.tab==='week'?'BC_TUAN':'BC_THANG'}_2560x1707.png`;a.href=canvas.toDataURL('image/png');a.click()};$('#copyBtn').onclick=async()=>{try{let blob=await new Promise(r=>canvas.toBlob(r,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Đã copy ảnh')}catch(e){toast('Trình duyệt không cho phép copy ảnh')}};window.addEventListener('resize',draw);run(false);
+function run(msg=true){state.rows=parse($('#dataInput').value,true);if(state.periods.length)buildSelectedRows();assess();renderValidation();draw();save();if(msg)toast('Đã tự nhận tuần cuối có dữ liệu & dựng Dashboard')}
+load();syncDatesToUI();$('#parseBtn').onclick=()=>run();$('#sampleBtn').onclick=()=>{$('#dataInput').value=SAMPLE;run()};document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{syncDatesFromUI();document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.tab=b.dataset.tab;syncDatesToUI();if(state.periods.length)buildSelectedRows();else state.rows=parse($('#dataInput').value,false);assess();renderValidation();draw();save()});['dateFrom','dateTo','dateSummary'].forEach(id=>$('#'+id).onchange=()=>{syncDatesFromUI();if(state.periods.length)buildSelectedRows();else state.rows=parse($('#dataInput').value);assess();renderValidation();draw();save()});$('#exportBtn').onclick=()=>{let a=document.createElement('a');a.download=`SEVENAM_${state.tab==='week'?'BC_TUAN':'BC_THANG'}_2560x1707.png`;a.href=canvas.toDataURL('image/png');a.click()};$('#copyBtn').onclick=async()=>{try{let blob=await new Promise(r=>canvas.toBlob(r,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);toast('Đã copy ảnh')}catch(e){toast('Trình duyệt không cho phép copy ảnh')}};window.addEventListener('resize',draw);state.rows=parse($('#dataInput').value,false);if(state.periods.length)buildSelectedRows();assess();renderValidation();draw();
 })();
